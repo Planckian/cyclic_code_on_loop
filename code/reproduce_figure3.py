@@ -73,14 +73,14 @@ def figure3(res_by_M, fname):
             ok = (res['eps'][d] > 1e-9) & (res['n_err'][d] > 0)     # hide points with no logical errors
             ax.errorbar(res['p'][ok], res['eps'][d][ok], yerr=res['eps_err'][d][ok], fmt='o', ms=5,
                         color=DISTANCE_COLORS[d], alpha=alpha, elinewidth=1, capsize=2)
-            p_fine = np.geomspace(res['th']['p_fit'].min(), res['th']['p_fit'].max(), 300)
+            p_fine = np.geomspace(res['cross']['p_fit'].min(), res['cross']['p_fit'].max(), 300)
             ax.plot(p_fine, lp.line_curve(res, d, p_fine), linestyle=ls, color=DISTANCE_COLORS[d],
                     alpha=alpha, linewidth=1.8)
-        th = res['th']
-        ax.plot(th['p_th'], th['pL_th'], marker='*', markersize=20, color='black', markeredgecolor='white',
+        cr = res['cross']
+        ax.plot(cr['p_c'], cr['pL_c'], marker='*', markersize=20, color='black', markeredgecolor='white',
                 markeredgewidth=1.0, alpha=alpha, zorder=12)
         lx, ly, lha, lva = LABEL_POS[M]
-        ax.annotate(f"$p^{{({M})}}_{{c}}={lp.fmt_sig(100 * th['p_th'], 2)}\\%$", xy=(th['p_th'], th['pL_th']),
+        ax.annotate(f"$p^{{({M})}}_{{c}}={lp.fmt_sig(100 * cr['p_c'], 2)}\\%$", xy=(cr['p_c'], cr['pL_c']),
                     xytext=(lx, ly), textcoords='axes fraction', ha=lha, va=lva, fontsize=10,
                     alpha=min(alpha + 0.3, 1.0),
                     bbox=dict(boxstyle='round,pad=0.25', fc='white', ec='black', alpha=0.75 * alpha + 0.25,
@@ -110,12 +110,12 @@ def main():
             for i, p in enumerate(r['p']):
                 points.append(dict(M=M, d=d, p=p, logical_error_rate_per_cycle=r['eps'][d][i],
                                    bootstrap_std=r['eps_err'][d][i], logical_errors_total=int(r['n_err'][d][i])))
-        th = r['th']
-        crossings.append(dict(M=M, p_c=th['p_th'], p_c_bootstrap_std=r['p_th_err'],
-                              p_c_ci68_low=r['p_th_ci68'][0], p_c_ci68_high=r['p_th_ci68'][1],
-                              adjacent_distance_crossings=' '.join(f'{c:.6g}' for c in th['crossings']),
-                              nu=th['nu'], line_a=th['poly'][1], line_b=th['poly'][0],
-                              logical_error_rate_at_star=th['pL_th']))
+        cr = r['cross']
+        crossings.append(dict(M=M, p_c=cr['p_c'], p_c_bootstrap_std=r['p_c_err'],
+                              p_c_ci68_low=r['p_c_ci68'][0], p_c_ci68_high=r['p_c_ci68'][1],
+                              adjacent_distance_crossings=' '.join(f'{c:.6g}' for c in cr['crossings']),
+                              nu=cr['nu'], line_a=cr['poly'][1], line_b=cr['poly'][0],
+                              logical_error_rate_at_star=cr['pL_c']))
     pd.DataFrame(points).to_csv(os.path.join(DATA, 'figure3_points.csv'), index=False, float_format='%.6g')
     cdf = pd.DataFrame(crossings)
     cdf.to_csv(os.path.join(DATA, 'figure3_crossing_points.csv'), index=False, float_format='%.6g')

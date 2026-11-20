@@ -13,12 +13,12 @@ Analysis (follows plot_results_phenom.ipynb, Figure 3 cell)
   (fit_fidelity_vs_rounds: unweighted, same bounds); drop_end_rounds=True reproduces
   the original behaviour of dropping the first and last round when there are > 3.
 * epsilon is averaged over bases (mean of the fitted epsilon).
-* threshold: fss_threshold.estimate_threshold (median of adjacent-distance
+* crossing point: fss_crossing.estimate_crossing_point (median of adjacent-distance
   crossings), then the collapsed straight-line fit log(eps) = a + b x,
-  x = log(p / p_th) d^(1/nu), whose lines for all distances meet at (p_th, exp(a)).
+  x = log(p / p_c) d^(1/nu), whose lines for all distances meet at (p_c, exp(a)).
   drop_end_p=True excludes the lowest and highest p from this fit.
 * bootstrap: every binomial count is resampled, epsilon refitted, and the whole
-  threshold analysis repeated, giving error bars on epsilon and on p_th.
+  crossing-point analysis repeated, giving error bars on epsilon and on p_c.
 """
 import os
 import time
@@ -32,7 +32,7 @@ from ChainCodeGlobal import ChainCodeGlobal
 from LinearChainCodeGlobal import LinearChainCodeGlobal
 from collectorGlobal import single_run, prepare_luts
 from process_data import task_key, fit_fidelity_vs_rounds
-from fss_threshold import estimate_threshold, _fss_scaling_variable
+from fss_crossing import estimate_crossing_point, _fss_scaling_variable
 
 
 # --------------------------------------------------------------------------- codes and tasks
@@ -243,56 +243,56 @@ def eps_curves(table_M, distances, bases, drop_end_rounds=True, n_boot=0, seed=0
     return p, eps, (boot if n_boot else None), n_err
 
 
-# --------------------------------------------------------------------------- threshold (as in plot_results_phenom)
+# --------------------------------------------------------------------------- crossing point (as in plot_results_phenom)
 def _result_dict(p, eps, distances):
-    """Minimal stand-in for process_data_logical_vs_rounds output, as estimate_threshold expects."""
+    """Minimal stand-in for process_data_logical_vs_rounds output, as estimate_crossing_point expects."""
     pe = np.zeros((len(p), 4)); pe[:, 0] = p
     return {'distances': np.array(distances), 'reference_error': 0, 'phys_error_rate': pe,
             'epsilon': np.array([eps[d] for d in distances])[:, None, :, None]}
 
 
-def threshold_once(p, eps, distances, drop_end_p=True):
-    """estimate_threshold + collapsed straight-line fit (Figure 3 cell of plot_results_phenom).
-    Returns dict(p_th, nu, poly, pL_th, crossings, found, p_fit)."""
+def crossing_once(p, eps, distances, drop_end_p=True):
+    """estimate_crossing_point + collapsed straight-line fit (Figure 3 cell of plot_results_phenom).
+    Returns dict(p_c, nu, poly, pL_c, crossings, found, p_fit)."""
     sel = slice(1, -1) if drop_end_p else slice(None)
     p_fit = p[sel]
     e_fit = {d: eps[d][sel] for d in distances}
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
-        th = estimate_threshold(_result_dict(p_fit, e_fit, distances), decoder_index=0, basis_index=0,
+        cr = estimate_crossing_point(_result_dict(p_fit, e_fit, distances), decoder_index=0, basis_index=0,
                                 plot=False, plot_collapse=False, verbose=False)
         found = not any('No crossing' in str(x.message) for x in w)
     x_all, y_all = [], []
-    for d in th['distances']:
-        x_all.extend(_fss_scaling_variable(th['p_grid'], th['p_th'], th['nu'], d))
-        y_all.extend(np.log(np.maximum(th['pL_by_distance'][d], 1e-300)))
+    for d in cr['distances']:
+        x_all.extend(_fss_scaling_variable(cr['p_grid'], cr['p_c'], cr['nu'], d))
+        y_all.extend(np.log(np.maximum(cr['pL_by_distance'][d], 1e-300)))
     x_all, y_all = np.array(x_all), np.array(y_all)
     order = np.argsort(x_all)
     poly = np.polyfit(x_all[order], y_all[order], 1)
-    return dict(p_th=float(th['p_th']), nu=float(th['nu']), poly=poly, pL_th=float(np.exp(np.polyval(poly, 0.0))),
-                crossings=th['crossing_points'], found=found, p_fit=p_fit)
+    return dict(p_c=float(cr['p_c']), nu=float(cr['nu']), poly=poly, pL_c=float(np.exp(np.polyval(poly, 0.0))),
+                crossings=cr['crossing_points'], found=found, p_fit=p_fit)
 
 
 def analyse(table_M, distances, bases, drop_end_rounds=True, drop_end_p=True, n_boot=200, seed=0):
-    """epsilon curves, threshold and bootstrap errors for one M."""
+    """epsilon curves, crossing point and bootstrap errors for one M."""
     p, eps, eps_boot, n_err = eps_curves(table_M, distances, bases, drop_end_rounds, n_boot, seed)
-    th = threshold_once(p, eps, distances, drop_end_p)
+    cr = crossing_once(p, eps, distances, drop_end_p)
     pb, found_b = [], 0
     for k in range(n_boot):
-        tb = threshold_once(p, {d: eps_boot[d][k] for d in distances}, distances, drop_end_p)
+        tb = crossing_once(p, {d: eps_boot[d][k] for d in distances}, distances, drop_end_p)
         if tb['found']:
-            pb.append(tb['p_th']); found_b += 1
+            pb.append(tb['p_c']); found_b += 1
     pb = np.array(pb)
     return dict(p=p, eps=eps, eps_err={d: (np.nanstd(eps_boot[d], axis=0, ddof=1) if n_boot else None) for d in distances},
-                n_err=n_err, th=th, p_th_err=float(np.std(pb, ddof=1)) if len(pb) > 2 else np.nan,
-                p_th_ci68=tuple(np.percentile(pb, [16, 84])) if len(pb) > 2 else (np.nan, np.nan),
+                n_err=n_err, cross=cr, p_c_err=float(np.std(pb, ddof=1)) if len(pb) > 2 else np.nan,
+                p_c_ci68=tuple(np.percentile(pb, [16, 84])) if len(pb) > 2 else (np.nan, np.nan),
                 boot_found=f'{found_b}/{n_boot}', drop_end_rounds=drop_end_rounds, drop_end_p=drop_end_p)
 
 
 def line_curve(res, d, p_fine):
     """Collapsed straight-line model for distance d (the lines drawn in Figure 3)."""
-    th = res['th']
-    return np.exp(np.polyval(th['poly'], _fss_scaling_variable(p_fine, th['p_th'], th['nu'], d)))
+    cr = res['cross']
+    return np.exp(np.polyval(cr['poly'], _fss_scaling_variable(p_fine, cr['p_c'], cr['nu'], d)))
 
 
 def fmt_sig(x, sig=2):

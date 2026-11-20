@@ -282,7 +282,7 @@ def process_data_logical_vs_physical(data_list, inactive_decoders=[], plot=True,
         ax.set_ylim(ylim)
     # plot the x=y line over the overlapping range of the two axes
     lims = [max(ax.get_xlim()[0], ax.get_ylim()[0]), min(ax.get_xlim()[1], ax.get_ylim()[1])]
-    ax.plot(lims, lims, color='k', linestyle='--', label='threshold')
+    ax.plot(lims, lims, color='k', linestyle='--', label='break-even')
     ax.set_xlabel(r'Physical error',fontsize=14)
     ax.set_ylabel(r'Logical error',fontsize=14)
     if logscale:
@@ -332,7 +332,7 @@ def process_data_logical_vs_physical_asym(data_list, inactive_decoders=[], plot=
         ax.set_ylim(ylim)
     # plot the x=y line over the overlapping range of the two axes
     lims = [max(ax.get_xlim()[0], ax.get_ylim()[0]), min(ax.get_xlim()[1], ax.get_ylim()[1])]
-    ax.plot(lims, lims, color='k', linestyle='--', label='threshold')
+    ax.plot(lims, lims, color='k', linestyle='--', label='break-even')
     ax.set_xlabel(r'Physical error',fontsize=16)
     ax.set_ylabel(r'Logical error',fontsize=16)
     if logscale:

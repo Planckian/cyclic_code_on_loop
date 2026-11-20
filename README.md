@@ -25,7 +25,7 @@ code/
   LookupTableDecoder.py          lookup-table decoder with memory (Simakov and Besedin, PRA 111, 012444)
   collectorGlobal.py             sampling and decoding (HybridLUT: lookup table + Tesseract fallback)
   lut_pipeline.py                running the tasks, logical-error-rate fits, crossing points, bootstrap
-  fss_threshold.py               adjacent-distance crossings and finite-size collapse
+  fss_crossing.py               adjacent-distance crossings and finite-size collapse
   process_data.py                fidelity-vs-rounds fit
   istarmap.py                    multiprocessing helper
   figure3_lut.ipynb              notebook used to run the simulations and draw Fig. 3

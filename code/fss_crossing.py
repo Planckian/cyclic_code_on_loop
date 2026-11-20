@@ -1,11 +1,11 @@
 """
-Finite-Size Scaling (FSS) threshold estimation for QEC.
+Finite-Size Scaling (FSS) crossing-point estimation for QEC.
 
 Drop this into process_data.py (or import it alongside it).
 
 Usage
 -----
-Call `estimate_threshold` with the list of `result` dicts returned by
+Call `estimate_crossing_point` with the list of `result` dicts returned by
 `process_data_logical_vs_rounds` — one dict per code distance — or with
 a single dict that already contains multiple distances.
 
@@ -15,9 +15,9 @@ Example
     for data in [data_d3, data_d5, data_d7, data_d9]:
         results.append(process_data_logical_vs_rounds(data, plot=False))
 
-    threshold_result = estimate_threshold(results)
+    crossing_result = estimate_crossing_point(results)
     # or, if all distances are in one result dict:
-    threshold_result = estimate_threshold(result)
+    crossing_result = estimate_crossing_point(result)
 """
 
 import numpy as np
@@ -31,21 +31,21 @@ import warnings
 # Core FSS functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fss_scaling_variable(p, p_th, nu, d):
+def _fss_scaling_variable(p, p_c, nu, d):
     """
-    FSS scaling variable  x = log(p / p_th) * d^(1/nu).
+    FSS scaling variable  x = log(p / p_c) * d^(1/nu).
 
-    Using log(p/p_th) rather than (p - p_th) keeps x O(1) when the data
+    Using log(p/p_c) rather than (p - p_c) keeps x O(1) when the data
     spans several decades on a log scale, making the collapse well-conditioned.
-    The two forms are equivalent near p_th (by l'Hopital) but log(p/p_th)
+    The two forms are equivalent near p_c (by l'Hopital) but log(p/p_c)
     is far more numerically stable for log-spaced p grids.
     """
-    return np.log(np.maximum(p, 1e-300) / p_th) * d ** (1.0 / nu)
+    return np.log(np.maximum(p, 1e-300) / p_c) * d ** (1.0 / nu)
 
 
-def _collapse_variance(nu, p_th, p_grid, pL_by_distance):
+def _collapse_variance(nu, p_c, p_grid, pL_by_distance):
     """
-    Measure data-collapse quality for given (p_th, nu).
+    Measure data-collapse quality for given (p_c, nu).
 
     Rescales each distance's pL curve onto the common scaling variable x,
     interpolates all curves onto a shared x grid, then returns the mean
@@ -54,7 +54,7 @@ def _collapse_variance(nu, p_th, p_grid, pL_by_distance):
     not require a free polynomial — it just asks whether the curves overlap.
     """
     distances = sorted(pL_by_distance.keys())
-    x_by_d    = {d: _fss_scaling_variable(p_grid, p_th, nu, d) for d in distances}
+    x_by_d    = {d: _fss_scaling_variable(p_grid, p_c, nu, d) for d in distances}
     logpL_by_d = {d: np.log(np.maximum(pL_by_distance[d], 1e-300)) for d in distances}
 
     # Only evaluate on the x range shared by all distances
@@ -97,25 +97,25 @@ def _estimate_crossing_points(p_grid, pL_by_distance):
 # Main public function
 # ─────────────────────────────────────────────────────────────────────────────
 
-def estimate_threshold(
+def estimate_crossing_point(
     results,
     decoder_index=0,
     basis_index=0,
     nu_bounds=(0.3, 5.0),
-    p_th_bounds=None,
+    p_c_bounds=None,
     plot=True,
     plot_collapse=True,
     colors=None,
     verbose=True,
 ):
     """
-    Estimate the QEC threshold using Finite-Size Scaling (FSS).
+    Estimate the crossing point using Finite-Size Scaling (FSS).
 
     The FSS ansatz is::
 
-        pL(p, d) ≈ f( log(p / p_th) · d^(1/ν) )
+        pL(p, d) ≈ f( log(p / p_c) · d^(1/ν) )
 
-    where f is the universal scaling function.  The threshold p_th is
+    where f is the universal scaling function.  The crossing point p_c is
     estimated from the pairwise crossing points of adjacent-distance curves,
     and ν is extracted by minimising the data-collapse variance — the degree
     to which all curves land on a single f when plotted against the scaling
@@ -139,12 +139,12 @@ def estimate_threshold(
     nu_bounds : tuple (float, float), default (0.3, 5.0)
         Search bounds for ν (critical exponent).
 
-    p_th_bounds : tuple (float, float) or None
-        Search bounds for p_th.  If None (default), set automatically to
+    p_c_bounds : tuple (float, float) or None
+        Search bounds for p_c.  If None (default), set automatically to
         [p_min/10, p_max*10] so the crossing is never outside the window.
 
     plot : bool, default True
-        Plot log-log pL vs p with the threshold line marked.
+        Plot log-log pL vs p with the crossing point marked.
 
     plot_collapse : bool, default True
         Plot the FSS data collapse (log(pL) vs scaling variable x).
@@ -158,8 +158,8 @@ def estimate_threshold(
     Returns
     -------
     result_dict : dict with keys
-        'p_th'           : float  — estimated threshold (median of crossings)
-        'p_th_err'       : float  — std of crossing points (spread estimate)
+        'p_c'           : float  — estimated crossing point (median of crossings)
+        'p_c_err'       : float  — std of crossing points (spread estimate)
         'nu'             : float  — estimated critical exponent
         'nu_err'         : float  — uncertainty on ν from curvature of cost
         'crossing_points': list   — raw pairwise crossing p values
@@ -223,38 +223,38 @@ def estimate_threshold(
 
     distances_sorted = np.array(sorted(pL_by_distance.keys()))
 
-    # Auto-set p_th bounds from data
-    if p_th_bounds is None:
-        p_th_bounds = (p_grid.min() / 10.0, p_grid.max() * 10.0)
+    # Auto-set p_c bounds from data
+    if p_c_bounds is None:
+        p_c_bounds = (p_grid.min() / 10.0, p_grid.max() * 10.0)
 
-    # ── 2. Step 1 — estimate p_th from pairwise crossing points ─────────────
+    # ── 2. Step 1 — estimate p_c from pairwise crossing points ─────────────
     crossings = _estimate_crossing_points(p_grid, pL_by_distance)
 
     if not crossings:
         warnings.warn(
             "No crossing points found between adjacent distance curves. "
-            "Check that your p range straddles the threshold. "
-            "Falling back to geometric mean of p_grid as p_th estimate."
+            "Check that your p range straddles the crossing point. "
+            "Falling back to geometric mean of p_grid as p_c estimate."
         )
-        p_th_fit = float(np.sqrt(p_grid.min() * p_grid.max()))
-        p_th_err = float('nan')
+        p_c_fit = float(np.sqrt(p_grid.min() * p_grid.max()))
+        p_c_err = float('nan')
     else:
-        p_th_fit = float(np.median(crossings))
-        p_th_err = float(np.std(crossings)) if len(crossings) > 1 else 0.0
+        p_c_fit = float(np.median(crossings))
+        p_c_err = float(np.std(crossings)) if len(crossings) > 1 else 0.0
 
-    p_th_fit = np.clip(p_th_fit, p_th_bounds[0], p_th_bounds[1])
+    p_c_fit = np.clip(p_c_fit, p_c_bounds[0], p_c_bounds[1])
 
     # ── 3. Step 2 — estimate ν by minimising data-collapse variance ──────────
     #  Coarse grid scan first, then local refinement
     nu_coarse = np.linspace(nu_bounds[0], nu_bounds[1], 120)
     costs_coarse = np.array([
-        _collapse_variance(nu, p_th_fit, p_grid, pL_by_distance)
+        _collapse_variance(nu, p_c_fit, p_grid, pL_by_distance)
         for nu in nu_coarse
     ])
     nu_init = nu_coarse[np.argmin(costs_coarse)]
 
     opt = minimize(
-        lambda nu_arr: _collapse_variance(nu_arr[0], p_th_fit, p_grid, pL_by_distance),
+        lambda nu_arr: _collapse_variance(nu_arr[0], p_c_fit, p_grid, pL_by_distance),
         x0=[nu_init],
         method='L-BFGS-B',
         bounds=[(nu_bounds[0], nu_bounds[1])],
@@ -266,9 +266,9 @@ def estimate_threshold(
     # Uncertainty on ν from curvature of collapse-variance cost near minimum
     try:
         h = nu_fit * 1e-3
-        f0 = _collapse_variance(nu_fit,     p_th_fit, p_grid, pL_by_distance)
-        fp = _collapse_variance(nu_fit + h,  p_th_fit, p_grid, pL_by_distance)
-        fm = _collapse_variance(nu_fit - h,  p_th_fit, p_grid, pL_by_distance)
+        f0 = _collapse_variance(nu_fit,     p_c_fit, p_grid, pL_by_distance)
+        fp = _collapse_variance(nu_fit + h,  p_c_fit, p_grid, pL_by_distance)
+        fm = _collapse_variance(nu_fit - h,  p_c_fit, p_grid, pL_by_distance)
         d2f = (fp - 2*f0 + fm) / h**2
         nu_err = float(1.0 / np.sqrt(max(d2f, 1e-30)))
     except Exception:
@@ -277,7 +277,7 @@ def estimate_threshold(
     # ── 4. Verbose output ────────────────────────────────────────────────────
     if verbose:
         print("=" * 55)
-        print("  FSS Threshold Estimation Results")
+        print("  FSS Crossing-Point Estimation Results")
         print("=" * 55)
         print(f"  Distances used   : {distances_sorted.tolist()}")
         print(f"  Decoder index    : {decoder_index}")
@@ -288,7 +288,7 @@ def estimate_threshold(
         if crossings:
             print(f"  Crossing points  : {[f'{c:.3e}' for c in crossings]}")
             print(f"  Crossing mean    : {np.mean(crossings):.3e}")
-        print(f"  p_th (crossings) : {p_th_fit:.3e}  ± {p_th_err:.3e}")
+        print(f"  p_c (crossings) : {p_c_fit:.3e}  ± {p_c_err:.3e}")
         print(f"  ν   (collapse)   : {nu_fit:.4f}  ± {nu_err:.4f}")
         print("=" * 55)
 
@@ -296,7 +296,7 @@ def estimate_threshold(
     # Fit a cubic polynomial to the collapsed (x, log_pL) data for the overlay
     x_all_pts, logpL_all_pts = [], []
     for d in distances_sorted:
-        x_all_pts.extend(_fss_scaling_variable(p_grid, p_th_fit, nu_fit, d))
+        x_all_pts.extend(_fss_scaling_variable(p_grid, p_c_fit, nu_fit, d))
         logpL_all_pts.extend(np.log(np.maximum(pL_by_distance[d], 1e-300)))
     x_all_pts    = np.array(x_all_pts)
     logpL_all_pts = np.array(logpL_all_pts)
@@ -317,18 +317,18 @@ def estimate_threshold(
             )
             # Overlay FSS model curve: exp(polynomial(x(p)))
             p_fine = np.geomspace(p_grid.min(), p_grid.max(), 300)
-            x_fine = _fss_scaling_variable(p_fine, p_th_fit, nu_fit, d)
+            x_fine = _fss_scaling_variable(p_fine, p_c_fit, nu_fit, d)
             pL_fine = np.exp(np.polyval(poly_coeffs[::-1], x_fine))
             ax.plot(p_fine, pL_fine, '-', color=colors[i], alpha=0.6)
-        ax.axvline(p_th_fit, color='k', linestyle='--', linewidth=1.5,
-                   label=f'$p_{{th}}$ = {p_th_fit:.3e}')
+        ax.axvline(p_c_fit, color='k', linestyle='--', linewidth=1.5,
+                   label=f'$p_c$ = {p_c_fit:.3e}')
         ax.set_xscale('log')
         ax.set_yscale('log')
         ax.set_xlabel('Physical error rate $p$')
         ax.set_ylabel('Logical error rate $p_L$')
         ax.set_title(
-            f'FSS Threshold Estimate\n'
-            f'$p_{{th}}={p_th_fit:.3e}\\pm{p_th_err:.1e}$,  '
+            f'FSS Crossing-Point Estimate\n'
+            f'$p_c={p_c_fit:.3e}\\pm{p_c_err:.1e}$,  '
             f'$\\nu={nu_fit:.3f}\\pm{nu_err:.3f}$'
         )
         ax.legend(loc='upper left')
@@ -344,7 +344,7 @@ def estimate_threshold(
         markers = ['o', 's', '^', 'D', 'v', 'p'] * 5
         x_all_plot = []
         for i, d in enumerate(distances_sorted):
-            x_scaled = _fss_scaling_variable(p_grid, p_th_fit, nu_fit, d)
+            x_scaled = _fss_scaling_variable(p_grid, p_c_fit, nu_fit, d)
             ax2.semilogy(
                 x_scaled, pL_by_distance[d],
                 markers[i], color=colors[i],
@@ -358,12 +358,12 @@ def estimate_threshold(
         ax2.semilogy(x_range[mask], pL_range[mask],
                      'k-', linewidth=2, label='$f(x)$ fit', zorder=10)
         ax2.axvline(0, color='gray', linestyle=':', linewidth=1,
-                    label='$x=0$ ($p=p_{th}$)')
-        ax2.set_xlabel(r'Scaling variable $x = \log(p/p_{\rm th})\,d^{1/\nu}$')
+                    label='$x=0$ ($p=p_c$)')
+        ax2.set_xlabel(r'Scaling variable $x = \log(p/p_c)\,d^{1/\nu}$')
         ax2.set_ylabel('Logical error rate $p_L$')
         ax2.set_title(
             'FSS Data Collapse\n'
-            f'$p_{{th}}={p_th_fit:.3e}$,  $\\nu={nu_fit:.3f}$'
+            f'$p_c={p_c_fit:.3e}$,  $\\nu={nu_fit:.3f}$'
         )
         ax2.legend(loc='upper left')
         ax2.grid(True, which='major', axis='both', linestyle='--', alpha=0.5)
@@ -372,8 +372,8 @@ def estimate_threshold(
         plt.show()
 
     return {
-        'p_th':            p_th_fit,
-        'p_th_err':        p_th_err,
+        'p_c':            p_c_fit,
+        'p_c_err':        p_c_err,
         'nu':              nu_fit,
         'nu_err':          nu_err,
         'crossing_points': crossings,
